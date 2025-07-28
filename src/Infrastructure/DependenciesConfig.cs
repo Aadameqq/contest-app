@@ -4,7 +4,6 @@ using Infrastructure.Options;
 using Infrastructure.Other;
 using Infrastructure.Persistence.Dapper;
 using Infrastructure.Persistence.EF;
-using Infrastructure.Persistence.Redis;
 using Infrastructure.Smtp;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
@@ -28,12 +27,11 @@ public static class DependenciesConfig
 
         services.AddScoped<PasswordHasher, BCryptPasswordService>();
         services.AddScoped<PasswordVerifier, BCryptPasswordService>();
-        services.AddScoped<ActivationCodeEmailSender, ActivationCodeEmailSenderImpl>();
+        services.AddScoped<ConfirmationCodeEmailSender, ConfirmationCodeEmailSenderImpl>();
         services.AddScoped<EmailSender, SystemEmailSender>();
-        services.AddScoped<ActivationCodesRepository, RedisActivationCodesRepository>();
-        services.AddScoped<PasswordResetCodesRepository, RedisPasswordResetCodesRepository>();
-        services.AddScoped<PasswordResetEmailSender, PasswordResetEmailSenderImpl>();
         services.AddScoped<OAuthServiceFactory, OAuthServiceFactoryImpl>();
+        services.AddScoped<ConfirmationCodesRepository, EfConfirmationCodesRepository>();
+        services.AddScoped<ConfirmationCodeEmailSender, ConfirmationCodeEmailSenderImpl>();
 
         services.AddSingleton<OAuthStateTokenService, SystemOAuthStateTokenService>();
         services.AddSingleton<AuthTokenService, SystemAuthTokenService>();

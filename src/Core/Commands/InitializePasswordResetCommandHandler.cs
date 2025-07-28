@@ -7,29 +7,25 @@ namespace Core.Commands;
 
 public class InitializePasswordResetCommandHandler(
     UnitOfWork uow,
-    PasswordResetCodesRepository codesRepository,
-    PasswordResetEmailSender emailSender
-) : CommandHandler<InitializePasswordResetCommand>
+    ConfirmationService confirmationService
+) : InitializeConfirmationCommandHandler<InitializePasswordResetCommand>(confirmationService)
 {
-    public async Task<Result> Handle(InitializePasswordResetCommand cmd, CancellationToken _)
+    protected override async Task<Result<Account>> Prepare(InitializePasswordResetCommand cmd)
     {
         var accountsRepository = uow.GetAccountsRepository();
-        var account = await accountsRepository.FindByEmail(cmd.Email);
 
-        if (account is null)
+        var found = await accountsRepository.FindByEmail(cmd.Email);
+
+        if (found is null)
         {
             return new NoSuch<Account>();
         }
 
-        if (!account.HasPassword())
+        if (!found.HasPassword())
         {
             return new NoPassword();
         }
 
-        var code = await codesRepository.Create(account);
-
-        await emailSender.Send(account, code);
-
-        return Result.Success();
+        return found;
     }
 }

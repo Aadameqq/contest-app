@@ -1,3 +1,6 @@
+using Core.Domain;
+
 namespace Core.Commands.Commands;
 
-public record ActivateAccountCommand(string Code) : Command;
+public record ActivateAccountCommand(Guid Id, string Code)
+    : RequireConfirmationCommand(Code, ConfirmableAction.AccountActivation) { }

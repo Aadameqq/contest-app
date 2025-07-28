@@ -1,5 +1,6 @@
 using Core.Commands;
 using Core.Commands.Commands;
+using Core.Commands.Outputs;
 using Core.Domain;
 using Core.Exceptions;
 using Core.Ports;
@@ -12,20 +13,19 @@ public class CreateAccountCommandHandlerTests
     private readonly AccountsRepository accountsRepositoryMock =
         Substitute.For<AccountsRepository>();
 
-    private readonly ActivationCodesRepository codesRepositoryMock =
-        Substitute.For<ActivationCodesRepository>();
-
     private readonly CreateAccountCommandHandler commandHandler;
 
-    private readonly ActivationCodeEmailSender emailSenderMock =
-        Substitute.For<ActivationCodeEmailSender>();
+    private readonly ConfirmationService confirmationServiceMock =
+        Substitute.For<ConfirmationService>();
 
     private readonly Account existingAccount = new("userName", "email", "password");
-    private readonly string expectedCode = "code";
 
     private readonly PasswordHasher passwordHasherMock = Substitute.For<PasswordHasher>();
 
+    private readonly SessionCreator sessionCreatorMock = Substitute.For<SessionCreator>();
+
     private readonly TestAccount testAccount = new("new-userName", "new-email", "new-password");
+
     private readonly UnitOfWork uowMock = Substitute.For<UnitOfWork>();
 
     public CreateAccountCommandHandlerTests()
@@ -33,8 +33,8 @@ public class CreateAccountCommandHandlerTests
         commandHandler = new CreateAccountCommandHandler(
             uowMock,
             passwordHasherMock,
-            codesRepositoryMock,
-            emailSenderMock
+            confirmationServiceMock,
+            sessionCreatorMock
         );
 
         uowMock.GetAccountsRepository().Returns(accountsRepositoryMock);
@@ -44,8 +44,6 @@ public class CreateAccountCommandHandlerTests
         passwordHasherMock
             .HashPassword(Arg.Any<string>())
             .Returns(args => GenerateTestHash(args.Arg<string>()));
-
-        codesRepositoryMock.Create(Arg.Any<Account>()).Returns(expectedCode);
     }
 
     [Fact]
@@ -75,21 +73,16 @@ public class CreateAccountCommandHandlerTests
     }
 
     [Fact]
-    public async Task WhenGivenEmailIsNotOccupied_ShouldCreateCodeForCorrectAccount()
+    public async Task WhenGivenEmailIsNotOccupied_ShouldBeginConfirmation()
     {
         await RunCommand(testAccount.UserName, testAccount.Email, testAccount.Password);
 
-        await codesRepositoryMock.Received().Create(Arg.Is<Account>(a => IsExpectedAccount(a)));
-    }
-
-    [Fact]
-    public async Task WhenGivenEmailIsNotOccupied_ShouldSendEmailWithValidData()
-    {
-        await RunCommand(testAccount.UserName, testAccount.Email, testAccount.Password);
-
-        await emailSenderMock
+        await confirmationServiceMock
             .Received()
-            .Send(Arg.Is<Account>(a => IsExpectedAccount(a)), Arg.Is(expectedCode));
+            .BeginConfirmation(
+                Arg.Is<Account>(a => IsExpectedAccount(a)),
+                ConfirmableAction.AccountActivation
+            );
     }
 
     private bool IsExpectedAccount(Account? account)
@@ -103,11 +96,10 @@ public class CreateAccountCommandHandlerTests
     private void AssertNoChanges()
     {
         uowMock.DidNotReceive().Flush();
-        codesRepositoryMock.DidNotReceive().Create(Arg.Any<Account>());
-        emailSenderMock.DidNotReceive().Send(Arg.Any<Account>(), Arg.Any<string>());
+        sessionCreatorMock.DidNotReceive().CreateSession(Arg.Any<Account>());
     }
 
-    private Task<Result> RunCommand(string userName, string email, string password)
+    private Task<Result<TokenPairOutput>> RunCommand(string userName, string email, string password)
     {
         var cmd = new CreateAccountCommand(userName, email, password);
         return commandHandler.Handle(cmd, CancellationToken.None);

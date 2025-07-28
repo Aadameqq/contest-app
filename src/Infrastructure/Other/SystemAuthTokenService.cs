@@ -13,6 +13,7 @@ public class SystemAuthTokenService(IOptions<AuthOptions> authOptions) : AuthTok
     private const string SessionIdClaimType = "sessionId";
     private const string AccountIdClaimType = "accountId";
     private const string AccountRoleClaimType = "accountRole";
+    private const string AccountIsActivatedClaimType = "isActivated";
     private const string TokenIdClaimType = "tokenId";
 
     private readonly JwtService accessTokenJwtService = new(
@@ -46,8 +47,14 @@ public class SystemAuthTokenService(IOptions<AuthOptions> authOptions) : AuthTok
         var userId = Guid.Parse(JwtService.GetClaim(principal, AccountIdClaimType));
         var sessionId = Guid.Parse(JwtService.GetClaim(principal, SessionIdClaimType));
         var role = JwtService.GetClaim(principal, AccountRoleClaimType);
+        var isActivated = JwtService.GetClaim(principal, AccountIsActivatedClaimType);
 
-        return new AccessTokenPayload(userId, sessionId, Role.ParseOrFail(role));
+        return new AccessTokenPayload(
+            userId,
+            sessionId,
+            Role.ParseOrFail(role),
+            bool.Parse(isActivated)
+        );
     }
 
     public async Task<RefreshTokenPayload?> FetchRefreshTokenPayloadIfValid(string refreshToken)
@@ -73,6 +80,7 @@ public class SystemAuthTokenService(IOptions<AuthOptions> authOptions) : AuthTok
             new(AccountIdClaimType, account.Id.ToString()),
             new(AccountRoleClaimType, account.Role.Name),
             new(SessionIdClaimType, sessionId.ToString()),
+            new(AccountIsActivatedClaimType, account.HasBeenActivated().ToString()),
         };
 
         return accessTokenJwtService.SignToken(claims);

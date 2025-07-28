@@ -14,6 +14,18 @@ public static class ApiResponse
         return GenerateResponse(401, customMessage);
     }
 
+    public static ActionResult Timeout(string customMessage = "Timeout")
+    {
+        return GenerateResponse(408, customMessage);
+    }
+
+    public static ActionResult Cooldown(
+        string customMessage = "Too many attempts. Please wait a bit before trying again"
+    )
+    {
+        return GenerateResponse(429, customMessage);
+    }
+
     public static ActionResult Conflict(string customMessage = "Conflict")
     {
         return GenerateResponse(409, customMessage);

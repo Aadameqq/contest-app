@@ -14,22 +14,30 @@ namespace Api.Controllers;
 public class AccountsController(IMediator mediator) : ControllerBase
 {
     [HttpPost("")]
-    public async Task<IActionResult> Create([FromBody] CreateAccountBody body)
+    public async Task<ActionResult<TokenPairResponse>> Create([FromBody] CreateAccountBody body)
     {
         var result = await mediator.Send(
             new CreateAccountCommand(body.Username, body.Email, body.Password)
         );
 
-        if (result is { IsFailure: true, Exception: AlreadyExists<Account> })
+        if (result.IsFailure)
         {
-            return ApiResponse.Conflict("Account with given email already exists");
+            return result.Exception switch
+            {
+                AlreadyExists<Account> _ => ApiResponse.Conflict(
+                    "Account with given email already exists"
+                ),
+                TooManyAttempts _ => ApiResponse.Cooldown(),
+                _ => throw result.Exception,
+            };
         }
 
-        return ApiResponse.Ok();
+        return new TokenPairResponse(result.Value.AccessToken, result.Value.RefreshToken);
     }
 
     [HttpGet("@me")]
     [RequireAuth]
+    [OptionalActivation]
     public async Task<ActionResult<GetAuthenticatedUserResponse>> GetAuthenticated(
         [FromAuth] AuthorizedUser user
     )
@@ -51,43 +59,83 @@ public class AccountsController(IMediator mediator) : ControllerBase
     {
         var result = await mediator.Send(new InitializePasswordResetCommand(body.Email));
 
-        if (result is { IsFailure: true, Exception: NoSuch<Account> })
+        if (result.IsFailure)
         {
-            return ApiResponse.NotFound();
+            return result.Exception switch
+            {
+                TooManyAttempts => ApiResponse.Cooldown(),
+                NoPassword => ApiResponse.BadRequest(
+                    "Cannot reset password on non-password account"
+                ),
+                NoSuch<Account> => ApiResponse.BadRequest(
+                    "Account with given email does not exist"
+                ),
+                _ => throw result.Exception,
+            };
         }
 
         return ApiResponse.Ok("Password reset email sent");
     }
 
-    [HttpPost("@me/activation/{code}")]
-    public async Task<IActionResult> Activate([FromRoute] string code)
+    [HttpPost("@me/activation")]
+    [RequireAuth]
+    [OptionalActivation]
+    public async Task<IActionResult> InitializeActivation([FromAuth] AuthorizedUser user)
     {
-        var result = await mediator.Send(new ActivateAccountCommand(code));
+        var result = await mediator.Send(new InitializeAccountActivationCommand(user.UserId));
 
         if (result.IsFailure)
         {
             return result.Exception switch
             {
-                NoSuch<Account> _ => ApiResponse.NotFound(),
-                NoSuch _ => ApiResponse.NotFound(),
+                TooManyAttempts => ApiResponse.Cooldown(),
+                AlreadyActivated => ApiResponse.Forbid("Account already activated"),
                 _ => throw result.Exception,
             };
         }
 
-        return ApiResponse.Ok("Account activated");
+        return ApiResponse.Ok("Activation email sent");
+    }
+
+    [HttpPost("@me/activation/{code}")]
+    [RequireAuth]
+    [OptionalActivation]
+    public async Task<IActionResult> Activate(
+        [FromRoute] string code,
+        [FromAuth] AuthorizedUser user
+    )
+    {
+        var result = await mediator.Send(new ActivateAccountCommand(user.UserId, code));
+
+        if (result.IsFailure)
+        {
+            return result.Exception switch
+            {
+                NoSuch _ => ApiResponse.NotFound("Code not found"),
+                Expired _ => ApiResponse.Timeout("Given code has already expired"),
+                _ => throw result.Exception,
+            };
+        }
+
+        return ApiResponse.Ok("Account activated. Please refresh your access token");
     }
 
     [HttpDelete("@me/password/{code}")]
     public async Task<IActionResult> ResetPassword(
-        [FromRoute] string code,
-        [FromBody] ResetPasswordBody body
+        [FromBody] ResetPasswordBody body,
+        [FromRoute] string code
     )
     {
         var result = await mediator.Send(new ResetPasswordCommand(code, body.NewPassword));
 
-        if (result is { IsFailure: true, Exception: NoSuch })
+        if (result.IsFailure)
         {
-            return ApiResponse.NotFound();
+            return result.Exception switch
+            {
+                NoSuch _ => ApiResponse.NotFound("Code not found"),
+                Expired _ => ApiResponse.Timeout("Given code has already expired"),
+                _ => throw result.Exception,
+            };
         }
 
         return ApiResponse.Ok();

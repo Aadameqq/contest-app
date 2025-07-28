@@ -24,9 +24,6 @@ public class AuthController(IMediator mediator) : ControllerBase
             {
                 NoSuch<Account> _ => ApiResponse.Unauthorized(),
                 InvalidCredentials _ => ApiResponse.Unauthorized(),
-                AccountNotActivated _ => ApiResponse.Unauthorized(
-                    "Account has not been activated yet"
-                ),
                 _ => throw result.Exception,
             };
         }
@@ -51,9 +48,6 @@ public class AuthController(IMediator mediator) : ControllerBase
                 OAuthProviderConnectionFailure _ => ApiResponse.ServiceUnavailable(
                     "Failed to receive a valid response from the external provider"
                 ),
-                AccountNotActivated _ => ApiResponse.Unauthorized(
-                    "Account has not been activated yet"
-                ),
                 AlreadyExists<Account> => ApiResponse.Conflict(
                     "Account with this email already exists"
                 ),
@@ -69,6 +63,7 @@ public class AuthController(IMediator mediator) : ControllerBase
 
     [HttpDelete]
     [RequireAuth]
+    [OptionalActivation]
     public async Task<IActionResult> LogOut([FromAuth] AuthorizedUser authUser)
     {
         var result = await mediator.Send(new LogOutCommand(authUser.UserId, authUser.SessionId));

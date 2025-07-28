@@ -87,11 +87,6 @@ public class Account
 
     public Result<RefreshToken> CreateSession(DateTime now)
     {
-        if (!HasBeenActivated())
-        {
-            return new AccountNotActivated();
-        }
-
         var created = new AuthSession(Id, now);
 
         sessions.Add(created);

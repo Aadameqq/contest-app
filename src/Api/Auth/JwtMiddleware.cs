@@ -13,7 +13,7 @@ public class JwtMiddleware(RequestDelegate next, IMediator mediator)
         {
             await next(ctx);
             return;
-        }
+        } // TODO: możeby logiki trochę do serwisu
 
         const string tokenType = "Bearer ";
 
@@ -32,6 +32,19 @@ public class JwtMiddleware(RequestDelegate next, IMediator mediator)
         if (result.IsFailure)
         {
             await ApiResponse.ApplyAsync(ctx, ApiResponse.Unauthorized());
+            return;
+        }
+
+        var optionalActivationAttribute = ctx.GetEndpoint()
+            ?.Metadata.OfType<OptionalActivationAttribute>()
+            .FirstOrDefault();
+
+        if (!result.Value.IsActivated && optionalActivationAttribute is null)
+        {
+            await ApiResponse.ApplyAsync(
+                ctx,
+                ApiResponse.Forbid("Account has not been activated yet")
+            );
             return;
         }
 

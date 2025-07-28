@@ -1,35 +1,28 @@
 using Core.Commands.Commands;
 using Core.Domain;
-using Core.Exceptions;
 using Core.Ports;
 
 namespace Core.Commands;
 
-public class ActivateAccountCommandHandler(
-    ActivationCodesRepository activationCodesRepository,
-    UnitOfWork uow
-) : CommandHandler<ActivateAccountCommand>
+public class ActivateAccountCommandHandler(ConfirmationService confirmationService, UnitOfWork uow)
+    : RequireConfirmationCommandHandler<ActivateAccountCommand>(confirmationService)
 {
-    public async Task<Result> Handle(ActivateAccountCommand cmd, CancellationToken _)
+    protected override async Task<Result<Account>> Prepare(ActivateAccountCommand cmd)
     {
         var accountsRepository = uow.GetAccountsRepository();
-        var userId = await activationCodesRepository.GetAccountIdAndRevokeCode(cmd.Code);
+        return await uow.FailIfNull(() => accountsRepository.FindById(cmd.Id));
+    }
 
-        if (userId is null)
-        {
-            return new NoSuch();
-        }
+    protected override async Task<Result> HandleWithConfirmation(
+        Account account,
+        ActivateAccountCommand cmd
+    )
+    {
+        var accountsRepository = uow.GetAccountsRepository();
 
-        var user = await accountsRepository.FindById(userId.Value);
+        account.Activate();
 
-        if (user is null || user.HasBeenActivated())
-        {
-            return new NoSuch<Account>();
-        }
-
-        user.Activate();
-
-        await accountsRepository.Update(user);
+        await accountsRepository.Update(account);
         await uow.Flush();
 
         return Result.Success();

@@ -15,7 +15,8 @@ public class GetCurrentAccountQueryHandler(SqlConnectionFactory connectionFactor
         CancellationToken _
     )
     {
-        var sql = """select "Id", "UserName", "Email" from "Accounts" where "Id" = @Id""";
+        var sql =
+            """select "Id", "UserName", "Email", "Activated" from "Accounts" where "Id" = @Id""";
 
         var connection = connectionFactory.GetConnection();
 
